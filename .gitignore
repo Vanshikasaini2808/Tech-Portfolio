@@ -1,0 +1,10 @@
+# Binaries and Installers
+*.exe
+*.crdownload
+*.zip
+
+# Temporary files
+*.tmp
+.DS_Store
+Thumbs.db
+*.token
