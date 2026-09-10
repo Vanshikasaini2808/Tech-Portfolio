@@ -62,7 +62,7 @@
       background: var(--bg-dark);
     }
 
-    canvas {
+    canvas, video {
       display: block;
       width: 100%;
       height: 100%;
@@ -1094,12 +1094,12 @@
     </div>
   </div>
 
-  <!-- Realtime Frame Progress Pill -->
-  <div class="frame-counter" id="frameCounter">001 / 240</div>
+  <!-- Realtime Scroll Progress Pill -->
+  <div class="frame-counter" id="frameCounter">00% EXPLORE</div>
 
-  <!-- Pinned Hardware-Accelerated Canvas Scrubbing Animation -->
+  <!-- Pinned Hardware-Accelerated Video Background -->
   <div class="canvas-wrapper">
-    <canvas id="sequenceCanvas"></canvas>
+    <video id="bgVideo" src="hero-video.mp4" playsinline webkit-playsinline muted preload="auto" disablePictureInPicture></video>
     <div class="canvas-overlay"></div>
   </div>
 
@@ -1441,7 +1441,7 @@
         </div>
 
         <div class="portrait-thumb">
-          <img src="frames/frame_0100.jpg" alt="Vanshika Saini Portrait" />
+          <img src="portrait.jpg" alt="Vanshika Saini Portrait" />
         </div>
       </div>
     </section>
@@ -1454,149 +1454,87 @@
   </div>
 
   <script>
-    const TOTAL_FRAMES = 240;
-    const FRAME_DIR = 'frames';
-    const canvas = document.getElementById('sequenceCanvas');
-    const ctx = canvas.getContext('2d', { alpha: false });
+    const video = document.getElementById('bgVideo');
     const loaderOverlay = document.getElementById('loaderOverlay');
     const loaderPercentage = document.getElementById('loaderPercentage');
     const loaderBarFill = document.getElementById('loaderBarFill');
     const frameCounter = document.getElementById('frameCounter');
 
-    const images = [];
-    let loadedCount = 0;
-    let targetFrame = 1;
-    let currentFrameFloat = 1;
-    let lastDrawnFrame = -1;
-    let isInitialRenderDone = false;
+    let targetProgress = 0;
+    let currentProgress = 0;
+    let videoDuration = 10;
+    let isVideoReady = false;
 
-    function getFramePath(index) {
-      const padded = String(index).padStart(4, '0');
-      return `${FRAME_DIR}/frame_${padded}.jpg`;
-    }
+    // Set mobile & iOS attributes
+    video.muted = true;
+    video.playsInline = true;
 
-    function resizeCanvas() {
-      const dpr = Math.min(window.devicePixelRatio || 1, 2);
-      canvas.width = window.innerWidth * dpr;
-      canvas.height = window.innerHeight * dpr;
-      
-      const frameIndex = Math.round(currentFrameFloat);
-      const img = getBestFrame(frameIndex);
-      if (img) {
-        drawFrame(img);
+    function dismissLoader() {
+      if (isVideoReady) return;
+      isVideoReady = true;
+      if (video.duration && !isNaN(video.duration)) {
+        videoDuration = video.duration;
       }
+      loaderPercentage.textContent = '100%';
+      loaderBarFill.style.width = '100%';
+      setTimeout(() => {
+        loaderOverlay.classList.add('hidden');
+      }, 250);
     }
 
-    function drawFrame(img) {
-      if (!img || !img.complete || img.naturalWidth === 0) return;
+    video.addEventListener('loadedmetadata', dismissLoader);
+    video.addEventListener('canplay', dismissLoader);
+    video.addEventListener('canplaythrough', dismissLoader);
 
-      const cw = canvas.width;
-      const ch = canvas.height;
-      const iw = img.naturalWidth;
-      const ih = img.naturalHeight;
-
-      const scale = Math.max(cw / iw, ch / ih);
-      const nw = iw * scale;
-      const nh = ih * scale;
-      const cx = (cw - nw) / 2;
-      const cy = (ch - nh) / 2;
-
-      ctx.drawImage(img, 0, 0, iw, ih, cx, cy, nw, nh);
-    }
-
-    function getBestFrame(requestedIndex) {
-      const idx = Math.max(1, Math.min(requestedIndex, TOTAL_FRAMES)) - 1;
-      
-      if (images[idx] && images[idx].complete && images[idx].naturalWidth > 0) {
-        return images[idx];
+    // Initial priming on interaction for mobile iOS Safari / Android
+    const primeVideo = () => {
+      const playPromise = video.play();
+      if (playPromise !== undefined) {
+        playPromise.then(() => {
+          video.pause();
+          dismissLoader();
+        }).catch(() => {
+          dismissLoader();
+        });
       }
+    };
 
-      for (let offset = 1; offset < TOTAL_FRAMES; offset++) {
-        const left = idx - offset;
-        const right = idx + offset;
-
-        if (left >= 0 && images[left] && images[left].complete && images[left].naturalWidth > 0) {
-          return images[left];
-        }
-        if (right < TOTAL_FRAMES && images[right] && images[right].complete && images[right].naturalWidth > 0) {
-          return images[right];
-        }
-      }
-      return null;
+    if (video.readyState >= 2) {
+      dismissLoader();
+    } else {
+      setTimeout(dismissLoader, 1500);
     }
 
-    function preloadFrames() {
-      const firstImg = new Image();
-      firstImg.src = getFramePath(1);
-      images[0] = firstImg;
-
-      firstImg.onload = () => {
-        loadedCount++;
-        if (!isInitialRenderDone) {
-          drawFrame(firstImg);
-          isInitialRenderDone = true;
-        }
-      };
-
-      for (let i = 2; i <= TOTAL_FRAMES; i++) {
-        const img = new Image();
-        const index = i - 1;
-        img.src = getFramePath(i);
-        images[index] = img;
-
-        img.onload = () => {
-          loadedCount++;
-          const percent = Math.round((loadedCount / TOTAL_FRAMES) * 100);
-          loaderPercentage.textContent = `${percent}%`;
-          loaderBarFill.style.width = `${percent}%`;
-
-          if (loadedCount >= TOTAL_FRAMES) {
-            setTimeout(() => {
-              loaderOverlay.classList.add('hidden');
-            }, 300);
-          }
-        };
-
-        img.onerror = () => {
-          loadedCount++;
-          if (loadedCount >= TOTAL_FRAMES) {
-            loaderOverlay.classList.add('hidden');
-          }
-        };
-      }
-    }
+    window.addEventListener('touchstart', primeVideo, { once: true, passive: true });
+    window.addEventListener('click', primeVideo, { once: true, passive: true });
 
     function onScroll() {
       const scrollTop = window.scrollY || document.documentElement.scrollTop;
       const maxScroll = Math.max(document.documentElement.scrollHeight - window.innerHeight, 1);
-      const progress = Math.min(Math.max(scrollTop / maxScroll, 0), 1);
+      targetProgress = Math.min(Math.max(scrollTop / maxScroll, 0), 1);
 
-      targetFrame = 1 + progress * (TOTAL_FRAMES - 1);
+      if (frameCounter) {
+        const pct = Math.round(targetProgress * 100);
+        frameCounter.textContent = `${String(pct).padStart(2, '0')}% EXPLORE`;
+      }
     }
 
     function renderLoop() {
-      // 0.10 lerp dampening for buttery smooth cinematic inertia
-      currentFrameFloat += (targetFrame - currentFrameFloat) * 0.10;
+      // 0.12 linear interpolation for fluid cinematic scrubbing
+      currentProgress += (targetProgress - currentProgress) * 0.12;
 
-      const roundedFrame = Math.round(currentFrameFloat);
-
-      if (roundedFrame !== lastDrawnFrame) {
-        const img = getBestFrame(roundedFrame);
-        if (img) {
-          drawFrame(img);
-          lastDrawnFrame = roundedFrame;
-          frameCounter.textContent = `${String(roundedFrame).padStart(3, '0')} / ${String(TOTAL_FRAMES).padStart(3, '0')}`;
+      if (videoDuration > 0) {
+        const targetTime = currentProgress * videoDuration;
+        if (Math.abs(video.currentTime - targetTime) > 0.03) {
+          video.currentTime = targetTime;
         }
       }
 
       requestAnimationFrame(renderLoop);
     }
 
-    window.addEventListener('resize', resizeCanvas);
     window.addEventListener('scroll', onScroll, { passive: true });
-
-    resizeCanvas();
-    preloadFrames();
+    onScroll();
     requestAnimationFrame(renderLoop);
   </script>
 </body>
